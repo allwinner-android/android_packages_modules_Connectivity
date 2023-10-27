@@ -878,6 +878,7 @@ public final class NetworkCapabilities implements Parcelable {
             TRANSPORT_LOWPAN,
             TRANSPORT_TEST,
             TRANSPORT_USB,
+            TRANSPORT_PPPOE,
     })
     public @interface Transport { }
 
@@ -929,10 +930,21 @@ public final class NetworkCapabilities implements Parcelable {
      */
     public static final int TRANSPORT_USB = 8;
 
+    ///AW CODE: [feat]
+    /**
+     * Indicates this network uses a PPPOE transport.
+     */
+    public static final int TRANSPORT_PPPOE = 9;
+    ///AW: add end
     /** @hide */
     public static final int MIN_TRANSPORT = TRANSPORT_CELLULAR;
+    ///AW CODE: [feat]
     /** @hide */
-    public static final int MAX_TRANSPORT = TRANSPORT_USB;
+    public static final int MAX_TRANSPORT = TRANSPORT_PPPOE;
+    ///AW: add end
+
+    /** @hide */
+    //public static final int MAX_TRANSPORT = TRANSPORT_USB;
 
     /** @hide */
     public static boolean isValidTransport(@Transport int transportType) {
@@ -948,7 +960,8 @@ public final class NetworkCapabilities implements Parcelable {
         "WIFI_AWARE",
         "LOWPAN",
         "TEST",
-        "USB"
+        "USB",
+        "PPPOE"
     };
 
     /**

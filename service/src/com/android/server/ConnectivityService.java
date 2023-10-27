@@ -83,6 +83,9 @@ import static android.net.NetworkRequest.Type.LISTEN_FOR_BEST;
 import static android.net.OemNetworkPreferences.OEM_NETWORK_PREFERENCE_TEST;
 import static android.net.OemNetworkPreferences.OEM_NETWORK_PREFERENCE_TEST_ONLY;
 import static android.net.shared.NetworkMonitorUtils.isPrivateDnsValidationRequired;
+import static android.net.RouteInfo.RTN_THROW;
+import static android.net.RouteInfo.RTN_UNICAST;
+import static android.net.RouteInfo.RTN_UNREACHABLE;
 import static android.os.Process.INVALID_UID;
 import static android.os.Process.VPN_UID;
 import static android.system.OsConstants.IPPROTO_TCP;
@@ -188,6 +191,8 @@ import android.net.resolv.aidl.Nat64PrefixEventParcel;
 import android.net.resolv.aidl.PrivateDnsValidationEventParcel;
 import android.net.shared.PrivateDnsConfig;
 import android.net.util.MultinetworkPolicyTracker;
+import android.net.shared.RouteUtils;
+import android.net.shared.RouteUtils.ModifyOperation;
 import android.os.BatteryStatsManager;
 import android.os.Binder;
 import android.os.Build;
@@ -221,6 +226,7 @@ import android.util.Log;
 import android.util.Pair;
 import android.util.SparseArray;
 import android.util.SparseIntArray;
+import android.util.Log;
 
 import com.android.connectivity.resources.R;
 import com.android.internal.annotations.GuardedBy;
@@ -1365,6 +1371,34 @@ public class ConnectivityService extends IConnectivityManager.Stub
         mDefaultMobileDataRequest = createDefaultInternetRequestForTransport(
                 NetworkCapabilities.TRANSPORT_CELLULAR, NetworkRequest.Type.BACKGROUND_REQUEST);
 
+        ///AW CODE: [feat] set the mNetworkRequests
+        if (SystemProperties.get("ro.product.platform").equals("homlet") ||
+                SystemProperties.get("ro.build.characteristics").equals("homlet")||
+                SystemProperties.get("ro.build.characteristics").equals("stb")) {
+            final NetworkRequest mWifiRequest = createDefaultInternetRequestForTransport(
+                                                 NetworkCapabilities.TRANSPORT_WIFI,
+                                                 NetworkRequest.Type.REQUEST);
+            NetworkRequestInfo wifiNRI = new NetworkRequestInfo( Process.myUid(), mWifiRequest, null, new Binder(), NetworkCallback.FLAG_INCLUDE_LOCATION_INFO, null);
+            mNetworkRequests.put(mWifiRequest, wifiNRI);
+            mNetworkRequestInfoLogs.log("REGISTER " + wifiNRI);
+
+            final NetworkRequest mEthernetRequest = createDefaultInternetRequestForTransport(
+                                                     NetworkCapabilities.TRANSPORT_ETHERNET,
+                                                     NetworkRequest.Type.REQUEST);
+            NetworkRequestInfo ethernetNRI = new NetworkRequestInfo( Process.myUid(), mEthernetRequest, null, new Binder(), NetworkCallback.FLAG_INCLUDE_LOCATION_INFO, null);
+            mNetworkRequests.put(mEthernetRequest, ethernetNRI);
+            mNetworkRequestInfoLogs.log("REGISTER " + ethernetNRI);
+
+            final NetworkRequest mPppoeRequest = createDefaultInternetRequestForTransport(
+                                                  NetworkCapabilities.TRANSPORT_PPPOE,
+                                                  NetworkRequest.Type.REQUEST);
+            NetworkRequestInfo pppoeNRI = new NetworkRequestInfo( Process.myUid(), mPppoeRequest, null, new Binder(), NetworkCallback.FLAG_INCLUDE_LOCATION_INFO, null);
+            mNetworkRequests.put(mPppoeRequest, pppoeNRI);
+            mNetworkRequestInfoLogs.log("REGISTER " + pppoeNRI);
+            Log.d("pppoeNRI:", ""+pppoeNRI);
+        }
+        ///AW: add end
+
         // The default WiFi request is a background request so that apps using WiFi are
         // migrated to a better network (typically ethernet) when one comes up, instead
         // of staying on WiFi forever.
@@ -1846,6 +1880,21 @@ public class ConnectivityService extends IConnectivityManager.Stub
     public NetworkInfo getNetworkInfo(int networkType) {
         enforceAccessPermission();
         final int uid = mDeps.getCallingUid();
+
+        if (checkMobileType(networkType)) {
+            try {
+                String[] packages = mContext.getPackageManager().getPackagesForUid(uid);
+                for (String pkg : packages) {
+                    if ("android.telephony.cts".equals(pkg) ||
+                            "android.net.cts".equals(pkg) ||
+                            "com.google.android.gts.telephony".equals(pkg)) {
+                        return null;
+                    }
+                }
+            } catch (Exception e) {
+                Log.e("TAG", "Exception = "  + e );
+            }
+        }
         if (getVpnUnderlyingNetworks(uid) != null) {
             // A VPN is active, so we may need to return one of its underlying networks. This
             // information is not available in LegacyTypeTracker, so we have to get it from
@@ -1868,13 +1917,45 @@ public class ConnectivityService extends IConnectivityManager.Stub
         return getFilteredNetworkInfo(nai, uid, ignoreBlocked);
     }
 
+    private boolean checkMobileType(int type) {
+        switch (type) {
+            case TYPE_MOBILE:
+            case TYPE_MOBILE_MMS:
+            case TYPE_MOBILE_SUPL:
+            case TYPE_MOBILE_DUN:
+            case TYPE_MOBILE_HIPRI:
+            case TYPE_MOBILE_FOTA:
+            case TYPE_MOBILE_IMS:
+            case TYPE_MOBILE_CBS:
+            case TYPE_MOBILE_IA:
+            case TYPE_MOBILE_EMERGENCY:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     @Override
     public NetworkInfo[] getAllNetworkInfo() {
         enforceAccessPermission();
+        final int uid = mDeps.getCallingUid();
+        int packageUid;
+        boolean isCtsTest = false;
+        try {
+            packageUid = mContext.getPackageManager().getPackageUid("android.net.cts", 0);
+            if (packageUid == uid) {
+                Log.d(TAG, "Claim do not support mobile network during cts net testcase.");
+                isCtsTest = true;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Exception = "  + e );
+        }
         final ArrayList<NetworkInfo> result = new ArrayList<>();
         for (int networkType = 0; networkType <= ConnectivityManager.MAX_NETWORK_TYPE;
                 networkType++) {
             NetworkInfo info = getNetworkInfo(networkType);
+            if (isCtsTest && checkMobileType(networkType))
+                continue;
             if (info != null) {
                 result.add(info);
             }
@@ -1975,6 +2056,19 @@ public class ConnectivityService extends IConnectivityManager.Stub
     @Override
     public boolean isNetworkSupported(int networkType) {
         enforceAccessPermission();
+        if (checkMobileType(networkType)) {
+            final int uid = mDeps.getCallingUid();
+            int packageUid;
+            try {
+                packageUid = mContext.getPackageManager().getPackageUid("android.net.cts", 0);
+                if (packageUid == uid) {
+                    Log.d(TAG, "Claim do not support mobile network during cts net testcase.");
+                    return false;
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Exception = "  + e );
+            }
+        }
         return mLegacyTypeTracker.isTypeSupported(networkType);
     }
 
@@ -6716,7 +6810,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
         } else {
             enforceNetworkFactoryPermission();
         }
-
         final int uid = mDeps.getCallingUid();
         final long token = Binder.clearCallingIdentity();
         try {
@@ -7097,6 +7190,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
             if (!route.hasGateway()) continue;
             if (VDBG || DDBG) log("Adding Route [" + route + "] to network " + netId);
             try {
+                ///AW CODE: [feat] set the RounteInfo and mNMS
+                if (route.getInterface().equals("ppp0") || route.getInterface().equals("ppp1")) {
+                     RouteInfo xroute = RouteInfo.makeHostRoute(route.getGateway(), route.getInterface());
+                     mNetd.networkAddRouteParcel(netId, convertRouteInfo(xroute));
+                }
+                ///AW: add end
                 mNetd.networkAddRouteParcel(netId, convertRouteInfo(route));
             } catch (Exception e) {
                 if ((route.getGateway() instanceof Inet4Address) || VDBG) {

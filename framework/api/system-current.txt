@@ -119,6 +119,7 @@ package android.net {
 
   public enum IpConfiguration.IpAssignment {
     enum_constant public static final android.net.IpConfiguration.IpAssignment DHCP;
+    enum_constant public static final android.net.IpConfiguration.IpAssignment PPPOE;
     enum_constant public static final android.net.IpConfiguration.IpAssignment STATIC;
     enum_constant public static final android.net.IpConfiguration.IpAssignment UNASSIGNED;
   }

@@ -30,6 +30,7 @@ import android.annotation.NonNull;
 import android.net.NetworkAgentConfig;
 import android.net.NetworkCapabilities;
 import android.net.NetworkScore;
+import android.os.SystemProperties;
 import android.net.NetworkScore.KeepConnectedReason;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -301,7 +302,13 @@ public class FullScore {
         // Except for VPNs, networks are subject to a penalty for not being validated.
         // Apply the penalty unless the network is a VPN, or it's validated or pretending to be.
         if (!hasPolicy(POLICY_IS_VALIDATED) && !pretendValidated && !hasPolicy(POLICY_IS_VPN)) {
-            score -= UNVALIDATED_SCORE_PENALTY;
+            ///AW CODE: [feat] add a if statement
+            if (!(SystemProperties.get("ro.product.platform").equals("homlet") ||
+                SystemProperties.get("ro.build.characteristics").equals("homlet")||
+                SystemProperties.get("ro.build.characteristics").equals("stb"))) {
+                score -= UNVALIDATED_SCORE_PENALTY;
+            }
+            ///AW: add end
         }
         if (score < 0) score = 0;
         return score;

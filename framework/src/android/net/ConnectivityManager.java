@@ -47,6 +47,7 @@ import android.net.TetheringManager.StartTetheringCallback;
 import android.net.TetheringManager.TetheringEventCallback;
 import android.net.TetheringManager.TetheringRequest;
 import android.net.wifi.WifiNetworkSuggestion;
+import android.os.SystemProperties;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Build.VERSION_CODES;
@@ -736,6 +737,11 @@ public class ConnectivityManager {
     @Deprecated
     public static final int TYPE_TEST = 18; // TODO: Remove this once NetworkTypes are unused.
 
+    ///AW CODE: [feat] set TYPE_PPPOE
+    @Deprecated
+    public static final int TYPE_PPPOE = 19;
+    ///AW: add end
+
     /**
      * @deprecated Use {@link NetworkCapabilities} instead.
      * @hide
@@ -773,10 +779,10 @@ public class ConnectivityManager {
     private static final int DEPRECATED_PHONE_CONSTANT_APN_REQUEST_FAILED = 3;
 
     /** {@hide} */
-    public static final int MAX_RADIO_TYPE = TYPE_TEST;
+    public static final int MAX_RADIO_TYPE = TYPE_PPPOE;
 
     /** {@hide} */
-    public static final int MAX_NETWORK_TYPE = TYPE_TEST;
+    public static final int MAX_NETWORK_TYPE = TYPE_PPPOE;
 
     private static final int MIN_NETWORK_TYPE = TYPE_MOBILE;
 
@@ -957,7 +963,14 @@ public class ConnectivityManager {
      */
     @Deprecated
     public static boolean isNetworkTypeValid(int networkType) {
-        return MIN_NETWORK_TYPE <= networkType && networkType <= MAX_NETWORK_TYPE;
+        ///AW CODE: [feat] add TYPE_PPPOE and change the returned value
+        if (SystemProperties.get("ro.product.platform").equals("homlet")||
+        "homlet".equals(SystemProperties.get("ro.build.characteristics", null))||
+        "stb".equals(SystemProperties.get("ro.build.characteristics", null))) {
+            return MIN_NETWORK_TYPE <= networkType && networkType <= MAX_NETWORK_TYPE;
+        }
+        return MIN_NETWORK_TYPE <= networkType && networkType <= TYPE_TEST;
+        ///AW:add end
     }
 
     /**
@@ -1011,6 +1024,8 @@ public class ConnectivityManager {
                 return "PROXY";
             case TYPE_VPN:
                 return "VPN";
+            case TYPE_PPPOE:
+                return "PPPOE";
             default:
                 return Integer.toString(type);
         }
@@ -1860,6 +1875,9 @@ public class ConnectivityManager {
         sLegacyTypeToTransport.put(TYPE_WIFI_P2P,     NetworkCapabilities.TRANSPORT_WIFI);
         sLegacyTypeToTransport.put(TYPE_BLUETOOTH,    NetworkCapabilities.TRANSPORT_BLUETOOTH);
         sLegacyTypeToTransport.put(TYPE_ETHERNET,     NetworkCapabilities.TRANSPORT_ETHERNET);
+        ///AW CODE: [feat]
+        sLegacyTypeToTransport.put(TYPE_PPPOE,        NetworkCapabilities.TRANSPORT_PPPOE);
+        ///AW: add end
     }
 
     private static final SparseIntArray sLegacyTypeToCapability = new SparseIntArray();
